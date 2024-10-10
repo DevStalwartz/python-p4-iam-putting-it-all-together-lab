@@ -1,16 +1,9 @@
-#!/usr/bin/env python3
-
 from flask import Flask, request, session, jsonify
 from flask_restful import Resource, Api
 from sqlalchemy.exc import IntegrityError
 from config import app, db, api
 from models import User, Recipe
-from resources.signup import Signup
 
-app = Flask(__name__)
-api = Api(app)
-
-# Flask session config for keeping track of logged-in users
 app.secret_key = "your_secret_key"
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -25,24 +18,21 @@ class Signup(Resource):
         bio = data.get('bio', '')
         image_url = data.get('image_url', '')
 
-        # Create new user
         new_user = User(username=username, bio=bio, image_url=image_url)
-        new_user.password_hash = password  # This automatically hashes the password
+        new_user.set_password(password)  # Hash the password
 
         try:
             db.session.add(new_user)
             db.session.commit()
-            session['user_id'] = new_user.id  # Start user session
-            return jsonify(new_user.to_dict())
+            session['user_id'] = new_user.id
+            return jsonify(new_user.to_dict()), 201
         except IntegrityError:
             db.session.rollback()
-            return {'error': 'Username already exists. Please choose a different username'}, 422
+            return {'error': 'Username already exists'}, 422
         except Exception as e:
-            # Catch-all for any other errors
             db.session.rollback()
-            return jsonify({
-                "errors": [str(e)]
-            }), 422
+            return jsonify({"errors": [str(e)]}), 422
+
 # CheckSession Resource
 class CheckSession(Resource):
     def get(self):
@@ -51,7 +41,7 @@ class CheckSession(Resource):
             user = User.query.get(user_id)
             return jsonify(user.to_dict())
         return {'error': 'Not logged in'}, 401
-       
+
 # Login Resource
 class Login(Resource):
     def post(self):
@@ -60,7 +50,6 @@ class Login(Resource):
         password = data.get('password')
 
         user = User.query.filter_by(username=username).first()
-
         if user and user.verify_password(password):
             session['user_id'] = user.id
             return jsonify(user.to_dict())
@@ -88,6 +77,9 @@ class RecipeIndex(Resource):
         instructions = data.get('instructions')
         minutes_to_complete = data.get('minutes_to_complete')
 
+        if not title or not instructions or not minutes_to_complete:
+            return {'error': 'Missing required fields'}, 422
+
         new_recipe = Recipe(
             title=title,
             instructions=instructions,
@@ -98,7 +90,7 @@ class RecipeIndex(Resource):
         db.session.add(new_recipe)
         db.session.commit()
 
-        return jsonify(new_recipe.to_dict())
+        return jsonify(new_recipe.to_dict()), 201
 
 api.add_resource(Signup, '/signup', endpoint='signup')
 api.add_resource(CheckSession, '/check_session', endpoint='check_session')
