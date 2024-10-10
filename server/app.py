@@ -5,10 +5,16 @@ from flask_restful import Resource, Api
 from sqlalchemy.exc import IntegrityError
 from config import app, db, api
 from models import User, Recipe
+from resources.signup import Signup
+
+app = Flask(__name__)
+api = Api(app)
 
 # Flask session config for keeping track of logged-in users
 app.secret_key = "your_secret_key"
-app.config['SESSION_TYPE'] = 'filesystem'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+db.init_app(app)
 
 # Signup Resource
 class Signup(Resource):
@@ -30,8 +36,13 @@ class Signup(Resource):
             return jsonify(new_user.to_dict())
         except IntegrityError:
             db.session.rollback()
-            return {'error': 'Username already exists'}, 400
-
+            return {'error': 'Username already exists. Please choose a different username'}, 422
+        except Exception as e:
+            # Catch-all for any other errors
+            db.session.rollback()
+            return jsonify({
+                "errors": [str(e)]
+            }), 422
 # CheckSession Resource
 class CheckSession(Resource):
     def get(self):
@@ -40,7 +51,7 @@ class CheckSession(Resource):
             user = User.query.get(user_id)
             return jsonify(user.to_dict())
         return {'error': 'Not logged in'}, 401
-
+       
 # Login Resource
 class Login(Resource):
     def post(self):
