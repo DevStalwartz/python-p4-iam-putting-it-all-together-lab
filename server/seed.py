@@ -44,15 +44,18 @@ with app.app_context():
 
     print("Creating recipes...")
     recipes = []
-for _ in range(100):
-    instructions = fake.paragraph(nb_sentences=8)
-    recipe = Recipe(
-        title=fake.sentence(),
-        instructions=instructions,
-        minutes_to_complete=randint(15, 90),
-        user=rc(users)  # Ensure every recipe has a user assigned
-    )
-    recipes.append(recipe)
+    for i in range(100):
+        instructions = fake.paragraph(nb_sentences=8)
+        
+        recipe = Recipe(
+            title=fake.sentence(),
+            instructions=instructions,
+            minutes_to_complete=randint(15,90),
+        )
+
+        recipe.user = rc(users)
+
+        recipes.append(recipe)
 
     db.session.add_all(recipes)
     

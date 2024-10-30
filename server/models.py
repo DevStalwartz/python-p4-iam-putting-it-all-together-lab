@@ -1,65 +1,58 @@
-from sqlalchemy.orm import validates, relationship
+from sqlalchemy.orm import validates
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy_serializer import SerializerMixin
 from config import db, bcrypt
 
-
 class User(db.Model, SerializerMixin):
     __tablename__ = 'users'
 
-    # Attributes
+    serialize_rules = ('-recipes.user', '-_password_hash',)
+
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String, nullable=False, unique=True)
-    _password_hash = db.Column(db.String, nullable=False)
+    _password_hash = db.Column(db.String)
     image_url = db.Column(db.String)
     bio = db.Column(db.String)
 
-    # Relationships
-    recipes = relationship('Recipe', backref='user', lazy=True)
+    recipes = db.relationship('Recipe', back_populates='user', cascade='all, delete-orphan')
 
-    # SerializerMixin config (if you want to hide the password hash in serialized data)
-    serialize_rules = ('-recipes.user', '-_password_hash')
-
+    # Protect password_hash from being accessed directly
     @hybrid_property
     def password_hash(self):
-        raise AttributeError("Password hashes are not readable.")
+        raise AttributeError('Password hashes may not be viewed.')
 
+    # Password setter method: hashes the password and stores it securely
     @password_hash.setter
     def password_hash(self, password):
-        self._password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
+        password_hash = bcrypt.generate_password_hash(password.encode('utf-8'))
+        self._password_hash = password_hash.decode('utf-8')
 
-    def verify_password(self, password):
-        return bcrypt.check_password_hash(self._password_hash, password)
+    # Method to authenticate the user by checking password validity
+    def authenticate(self, password):
+        return bcrypt.check_password_hash(self._password_hash, password.encode('utf-8'))
 
-    @validates('username')
-    def validate_username(self, key, username):
-        assert username is not None, "Username must be present."
-        return username
-    
-    
+    def __repr__(self):
+        return f'<User {self.username}, {self.bio}>'
+
 class Recipe(db.Model, SerializerMixin):
     __tablename__ = 'recipes'
 
-    # Attributes
+    serialize_rules = ('-user.recipes',)
+
     id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     title = db.Column(db.String, nullable=False)
     instructions = db.Column(db.String, nullable=False)
     minutes_to_complete = db.Column(db.Integer)
 
-    # Foreign key linking the recipe to a user
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    user = db.relationship('User', back_populates='recipes')
 
-    # SerializerMixin config (if you want to hide the user in serialized data)
-    serialize_rules = ('-user.recipes',)
-
-    @validates('title')
-    def validate_title(self, key, title):
-        assert title is not None, "Title must be present."
-        return title
-
+    # Validation to ensure instructions have at least 50 characters
     @validates('instructions')
-    def validate_instructions(self, key, instructions):
-        assert instructions is not None, "Instructions must be present."
-        assert len(instructions) >= 50, "Instructions must be at least 50 characters long."
-        return instructions
+    def validates_instructions(self, key, instruction):
+        if len(instruction) < 50:
+            raise ValueError("The instructions should be at least 50 characters long.")
+        return instruction
 
+    def __repr__(self):
+        return f'<Recipe {self.title}, {self.instructions}>'
